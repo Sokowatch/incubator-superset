@@ -44,9 +44,7 @@ class JinjaContextManager:
         }
 
     def init_app(self, app):
-        self._base_context = self._base_context.update(
-            app.config["JINJA_CONTEXT_ADDONS"]
-        )
+        self._base_context.update(app.config["JINJA_CONTEXT_ADDONS"])
 
     @property
     def base_context(self):
@@ -75,7 +73,7 @@ class UIManifestProcessor:
     def __init__(self, app_dir: str) -> None:
         self.app = None
         self.manifest: dict = {}
-        self.manifest_file = f"{app_dir}/static/assets/dist/manifest.json"
+        self.manifest_file = f"{app_dir}/static/assets/manifest.json"
 
     def init_app(self, app):
         self.app = app

@@ -14,7 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-from typing import List, Tuple
+from typing import Any, List, Tuple
 
 from superset.db_engine_specs.base import BaseEngineSpec
 
@@ -39,9 +39,7 @@ class ExasolEngineSpec(BaseEngineSpec):  # pylint: disable=abstract-method
     }
 
     @classmethod
-    def fetch_data(cls, cursor, limit: int) -> List[Tuple]:
+    def fetch_data(cls, cursor: Any, limit: int) -> List[Tuple]:
         data = super().fetch_data(cursor, limit)
         # Lists of `pyodbc.Row` need to be unpacked further
-        if data and type(data[0]).__name__ == "Row":
-            data = [tuple(row) for row in data]
-        return data
+        return cls.pyodbc_rows_to_tuples(data)

@@ -17,26 +17,16 @@
 import hashlib
 import re
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 
 import pandas as pd
 from sqlalchemy import literal_column
+from sqlalchemy.sql.expression import ColumnClause
 
 from superset.db_engine_specs.base import BaseEngineSpec
 
-pandas_dtype_map = {
-    "STRING": "object",
-    "BOOLEAN": "object",  # to support nullable bool
-    "INTEGER": "Int64",
-    "FLOAT": "float64",
-    "TIMESTAMP": "datetime64[ns]",
-    "DATETIME": "datetime64[ns]",
-    "DATE": "object",
-    "BYTES": "object",
-    "TIME": "object",
-    "RECORD": "object",
-    "NUMERIC": "object",
-}
+if TYPE_CHECKING:
+    from superset.models.core import Database  # pylint: disable=unused-import
 
 
 class BigQueryEngineSpec(BaseEngineSpec):
@@ -83,7 +73,7 @@ class BigQueryEngineSpec(BaseEngineSpec):
         return None
 
     @classmethod
-    def fetch_data(cls, cursor, limit: int) -> List[Tuple]:
+    def fetch_data(cls, cursor: Any, limit: int) -> List[Tuple]:
         data = super(BigQueryEngineSpec, cls).fetch_data(cursor, limit)
         if data and type(data[0]).__name__ == "Row":
             data = [r.values() for r in data]  # type: ignore
@@ -126,7 +116,7 @@ class BigQueryEngineSpec(BaseEngineSpec):
 
     @classmethod
     def extra_table_metadata(
-        cls, database, table_name: str, schema_name: str
+        cls, database: "Database", table_name: str, schema_name: str
     ) -> Dict[str, Any]:
         indexes = database.get_indexes(table_name, schema_name)
         if not indexes:
@@ -147,7 +137,7 @@ class BigQueryEngineSpec(BaseEngineSpec):
         }
 
     @classmethod
-    def _get_fields(cls, cols):
+    def _get_fields(cls, cols: List[Dict[str, Any]]) -> List[ColumnClause]:
         """
         BigQuery dialect requires us to not use backtick in the fieldname which are
         nested.
@@ -157,8 +147,7 @@ class BigQueryEngineSpec(BaseEngineSpec):
         column names in the result.
         """
         return [
-            literal_column(c.get("name")).label(c.get("name").replace(".", "__"))
-            for c in cols
+            literal_column(c["name"]).label(c["name"].replace(".", "__")) for c in cols
         ]
 
     @classmethod
@@ -170,7 +159,7 @@ class BigQueryEngineSpec(BaseEngineSpec):
         return "TIMESTAMP_MILLIS({col})"
 
     @classmethod
-    def df_to_sql(cls, df: pd.DataFrame, **kwargs):
+    def df_to_sql(cls, df: pd.DataFrame, **kwargs: Any) -> None:
         """
         Upload data from a Pandas DataFrame to BigQuery. Calls
         `DataFrame.to_gbq()` which requires `pandas_gbq` to be installed.
@@ -209,9 +198,3 @@ class BigQueryEngineSpec(BaseEngineSpec):
             if key in kwargs:
                 gbq_kwargs[key] = kwargs[key]
         pandas_gbq.to_gbq(df, **gbq_kwargs)
-
-    @classmethod
-    def get_pandas_dtype(cls, cursor_description: List[tuple]) -> Dict[str, str]:
-        return {
-            col[0]: pandas_dtype_map.get(col[1], "object") for col in cursor_description
-        }
