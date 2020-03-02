@@ -80,3 +80,6 @@ apache-superset-*.tar.gz*
 
 # Translation binaries
 messages.mo
+
+#Env files
+.env
