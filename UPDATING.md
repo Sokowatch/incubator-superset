@@ -23,10 +23,22 @@ assists people when migrating to a new version.
 
 ## Next
 
+* [9786](https://github.com/apache/incubator-superset/pull/9786): with the upgrade of `werkzeug` from version `0.16.0` to `1.0.1`, the `werkzeug.contrib.cache` module has been moved to a standalone package [cachelib](https://pypi.org/project/cachelib/). For example, to import the `RedisCache` class, please use the following import: `from cachelib.redis import RedisCache`.
+
+* [9572](https://github.com/apache/incubator-superset/pull/9572): a change which by defau;t means that the Jinja `current_user_id`, `current_username`, and `url_param` context calls no longer need to be wrapped via `cache_key_wrapper` in order to be included in the cache key. The `cache_key_wrapper` function should only be required for Jinja add-ons.
+
+* [8867](https://github.com/apache/incubator-superset/pull/8867): a change which adds the `tmp_schema_name` column to the `query` table which requires locking the table. Given the `query` table is heavily used performance may be degraded during the migration. Scheduled downtime may be advised.
+
+* [9238](https://github.com/apache/incubator-superset/pull/9238): the config option `TIME_GRAIN_FUNCTIONS` has been renamed to `TIME_GRAIN_EXPRESSIONS` to better reflect the content of the dictionary.
+
+* [9218](https://github.com/apache/incubator-superset/pull/9218): SQLite connections have been disabled by default
+for analytics databases. You can optionally enable SQLite by setting `PREVENT_UNSAFE_DB_CONNECTIONS` to `False`.
+It is not recommended to change this setting, as arbitrary SQLite connections can lead to security vulnerabilities.
+
 * [9133](https://github.com/apache/incubator-superset/pull/9133): Security list of permissions and list views has been
-disable by default. You can optionally enable them back again by setting the following config keys: 
-FAB_ADD_SECURITY_PERMISSION_VIEW, FAB_ADD_SECURITY_VIEW_MENU_VIEW, FAB_ADD_SECURITY_PERMISSION_VIEWS_VIEW to True.
- 
+disable by default. You can optionally enable them back again by setting the following config keys:
+`FAB_ADD_SECURITY_PERMISSION_VIEW`, `FAB_ADD_SECURITY_VIEW_MENU_VIEW`, `FAB_ADD_SECURITY_PERMISSION_VIEWS_VIEW` to `True`.
+
 * [9173](https://github.com/apache/incubator-superset/pull/9173): Changes the encoding of the query source from an int to an enum.
 
 * [9120](https://github.com/apache/incubator-superset/pull/9120): Changes the default behavior of ad-hoc sharing of
@@ -49,9 +61,9 @@ timestamp has been added to the query object's cache key to ensure updates to
 datasources are always reflected in associated query results. As a consequence all
 previously cached results will be invalidated when updating to the next version.
 
-* [8699](https://github.com/apache/incubator-superset/pull/8699): A `row_level_security_filters` 
-table has been added, which is many-to-many with `tables` and `ab_roles`.  The applicable filters 
-are added to the sqla query, and the RLS ids are added to the query cache keys. If RLS is enabled in config.py (`ENABLE_ROW_LEVEL_SECURITY = True`; by default, it is disabled), they can be 
+* [8699](https://github.com/apache/incubator-superset/pull/8699): A `row_level_security_filters`
+table has been added, which is many-to-many with `tables` and `ab_roles`.  The applicable filters
+are added to the sqla query, and the RLS ids are added to the query cache keys. If RLS is enabled in config.py (`ENABLE_ROW_LEVEL_SECURITY = True`; by default, it is disabled), they can be
 accessed through the `Security` menu, or when editting a table.
 
 * [8732](https://github.com/apache/incubator-superset/pull/8732): Swagger user interface is now enabled by default.

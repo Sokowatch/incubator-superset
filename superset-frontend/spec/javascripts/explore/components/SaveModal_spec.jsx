@@ -26,9 +26,9 @@ import { Modal, Button, Radio } from 'react-bootstrap';
 import sinon from 'sinon';
 import fetchMock from 'fetch-mock';
 
-import * as exploreUtils from '../../../../src/explore/exploreUtils';
-import * as saveModalActions from '../../../../src/explore/actions/saveModalActions';
-import SaveModal from '../../../../src/explore/components/SaveModal';
+import * as exploreUtils from 'src/explore/exploreUtils';
+import * as saveModalActions from 'src/explore/actions/saveModalActions';
+import SaveModal from 'src/explore/components/SaveModal';
 
 describe('SaveModal', () => {
   const middlewares = [thunk];
@@ -196,12 +196,20 @@ describe('SaveModal', () => {
 
     describe('should always reload or redirect', () => {
       let wrapper;
+      let windowLocation;
+
       beforeEach(() => {
         wrapper = getWrapper();
+        windowLocation = window.location;
+        // To bypass "TypeError: Cannot redefine property: assign"
+        Object.defineProperty(window, 'location', {
+          value: { ...windowLocation, assign: () => {} },
+        });
         sinon.stub(window.location, 'assign');
       });
       afterEach(() => {
         window.location.assign.restore();
+        Object.defineProperty(window, 'location', windowLocation);
       });
 
       it('Save & go to dashboard', done => {

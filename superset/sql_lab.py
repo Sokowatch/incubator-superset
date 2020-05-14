@@ -59,6 +59,7 @@ stats_logger = config["STATS_LOGGER"]
 SQLLAB_TIMEOUT = config["SQLLAB_ASYNC_TIME_LIMIT_SEC"]
 SQLLAB_HARD_TIMEOUT = SQLLAB_TIMEOUT + 60
 SQL_MAX_ROW = config["SQL_MAX_ROW"]
+SQLLAB_CTAS_NO_LIMIT = config["SQLLAB_CTAS_NO_LIMIT"]
 SQL_QUERY_MUTATOR = config["SQL_QUERY_MUTATOR"]
 log_query = config["QUERY_LOGGER"]
 logger = logging.getLogger(__name__)
@@ -120,10 +121,14 @@ def get_query(query_id, session):
 @contextmanager
 def session_scope(nullpool):
     """Provide a transactional scope around a series of operations."""
-    if nullpool:
-        engine = sqlalchemy.create_engine(
-            app.config["SQLALCHEMY_DATABASE_URI"], poolclass=NullPool
+    database_uri = app.config["SQLALCHEMY_DATABASE_URI"]
+    if "sqlite" in database_uri:
+        logger.warning(
+            "SQLite Database support for metadata databases will be removed \
+            in a future version of Superset."
         )
+    if nullpool:
+        engine = sqlalchemy.create_engine(database_uri, poolclass=NullPool)
         session_class = sessionmaker()
         session_class.configure(bind=engine)
         session = session_class()
@@ -134,9 +139,9 @@ def session_scope(nullpool):
     try:
         yield session
         session.commit()
-    except Exception as e:
+    except Exception as ex:
         session.rollback()
-        logger.exception(e)
+        logger.exception(ex)
         raise
     finally:
         session.close()
@@ -174,12 +179,12 @@ def get_sql_results(  # pylint: disable=too-many-arguments
                 expand_data=expand_data,
                 log_params=log_params,
             )
-        except Exception as e:  # pylint: disable=broad-except
+        except Exception as ex:  # pylint: disable=broad-except
             logger.error("Query %d", query_id)
-            logger.debug("Query %d: %s", query_id, e)
+            logger.debug("Query %d: %s", query_id, ex)
             stats_logger.incr("error_sqllab_unhandled")
             query = get_query(query_id, session)
-            return handle_query_error(str(e), query, session)
+            return handle_query_error(str(ex), query, session)
 
 
 # pylint: disable=too-many-arguments
@@ -207,9 +212,15 @@ def execute_sql_statement(sql_statement, query, user_name, session, cursor, log_
             query.tmp_table_name = "tmp_{}_table_{}".format(
                 query.user_id, start_dttm.strftime("%Y_%m_%d_%H_%M_%S")
             )
-        sql = parsed_query.as_create_table(query.tmp_table_name)
+        sql = parsed_query.as_create_table(
+            query.tmp_table_name, schema_name=query.tmp_schema_name
+        )
         query.select_as_cta_used = True
-    if parsed_query.is_select():
+
+    # Do not apply limit to the CTA queries when SQLLAB_CTAS_NO_LIMIT is set to true
+    if parsed_query.is_select() and not (
+        query.select_as_cta_used and SQLLAB_CTAS_NO_LIMIT
+    ):
         if SQL_MAX_ROW and (not query.limit or query.limit > SQL_MAX_ROW):
             query.limit = SQL_MAX_ROW
         if query.limit:
@@ -246,17 +257,17 @@ def execute_sql_statement(sql_statement, query, user_name, session, cursor, log_
             )
             data = db_engine_spec.fetch_data(cursor, query.limit)
 
-    except SoftTimeLimitExceeded as e:
+    except SoftTimeLimitExceeded as ex:
         logger.error("Query %d: Time limit exceeded", query.id)
-        logger.debug("Query %d: %s", query.id, e)
+        logger.debug("Query %d: %s", query.id, ex)
         raise SqlLabTimeoutException(
             "SQL Lab timeout. This environment's policy is to kill queries "
             "after {} seconds.".format(SQLLAB_TIMEOUT)
         )
-    except Exception as e:
-        logger.error("Query %d: %s", query.id, type(e))
-        logger.debug("Query %d: %s", query.id, e)
-        raise SqlLabException(db_engine_spec.extract_error_message(e))
+    except Exception as ex:
+        logger.error("Query %d: %s", query.id, type(ex))
+        logger.debug("Query %d: %s", query.id, ex)
+        raise SqlLabException(db_engine_spec.extract_error_message(ex))
 
     logger.debug("Query %d: Fetching cursor description", query.id)
     cursor_description = cursor.description
@@ -371,12 +382,15 @@ def execute_sql_statements(
                     result_set = execute_sql_statement(
                         statement, query, user_name, session, cursor, log_params
                     )
-                except Exception as e:  # pylint: disable=broad-except
-                    msg = str(e)
+                except Exception as ex:  # pylint: disable=broad-except
+                    msg = str(ex)
                     if statement_count > 1:
                         msg = f"[Statement {i+1} out of {statement_count}] " + msg
                     payload = handle_query_error(msg, query, session, payload)
                     return payload
+
+        # Commit the connection so CTA queries will create the table.
+        conn.commit()
 
     # Success, updating the query entry in database
     query.rows = result_set.size
@@ -385,8 +399,8 @@ def execute_sql_statements(
     if query.select_as_cta:
         query.select_sql = database.select_star(
             query.tmp_table_name,
+            schema=query.tmp_schema_name,
             limit=query.limit,
-            schema=database.force_ctas_schema,
             show_cols=False,
             latest_partition=False,
         )

@@ -24,6 +24,7 @@ export default () =>
     let treemapId;
     let linechartId;
     let boxplotId;
+    let dashboardId;
 
     // cypress can not handle window.scrollTo
     // https://github.com/cypress-io/cypress/issues/2761
@@ -43,6 +44,7 @@ export default () =>
       cy.get('#app').then(data => {
         const bootstrapData = JSON.parse(data[0].dataset.bootstrap);
         const dashboard = bootstrapData.dashboard_data;
+        dashboardId = dashboard.id;
         filterId = dashboard.slices.find(
           slice => slice.form_data.viz_type === 'filter_box',
         ).slice_id;
@@ -61,7 +63,7 @@ export default () =>
         };
         const filterRequest = `/superset/explore_json/?form_data=${JSON.stringify(
           filterFormdata,
-        )}`;
+        )}&dashboard_id=${dashboardId}`;
         cy.route('POST', filterRequest).as('filterRequest');
 
         const treemapFormdata = {
@@ -69,7 +71,7 @@ export default () =>
         };
         const treemapRequest = `/superset/explore_json/?form_data=${JSON.stringify(
           treemapFormdata,
-        )}`;
+        )}&dashboard_id=${dashboardId}`;
         cy.route('POST', treemapRequest).as('treemapRequest');
 
         const linechartFormdata = {
@@ -77,7 +79,7 @@ export default () =>
         };
         const linechartRequest = `/superset/explore_json/?form_data=${JSON.stringify(
           linechartFormdata,
-        )}`;
+        )}&dashboard_id=${dashboardId}`;
         cy.route('POST', linechartRequest).as('linechartRequest');
 
         const boxplotFormdata = {
@@ -85,7 +87,7 @@ export default () =>
         };
         const boxplotRequest = `/superset/explore_json/?form_data=${JSON.stringify(
           boxplotFormdata,
-        )}`;
+        )}&dashboard_id=${dashboardId}`;
         cy.route('POST', boxplotRequest).as('boxplotRequest');
       });
     });
@@ -115,8 +117,9 @@ export default () =>
         .last()
         .find('.editable-title input')
         .click();
-      cy.wait('@boxplotRequest');
-      cy.get('.grid-container .box_plot').should('be.exist');
+
+      // should exist a visible box_plot element
+      cy.get('.grid-container .box_plot');
     });
 
     it('should send new queries when tab becomes visible', () => {
@@ -143,9 +146,7 @@ export default () =>
       });
 
       // click row level tab, send 1 more query
-      cy.get('.tab-content ul.nav.nav-tabs li')
-        .last()
-        .click();
+      cy.get('.tab-content ul.nav.nav-tabs li').last().click();
       cy.wait('@linechartRequest').then(xhr => {
         const requestFormData = xhr.request.body;
         const requestParams = JSON.parse(requestFormData.get('form_data'));
@@ -164,6 +165,7 @@ export default () =>
         .last()
         .find('.editable-title input')
         .click();
+
       cy.wait('@boxplotRequest').then(xhr => {
         const requestFormData = xhr.request.body;
         const requestParams = JSON.parse(requestFormData.get('form_data'));
@@ -180,19 +182,18 @@ export default () =>
         .find('ul.nav.nav-tabs li')
         .first()
         .click();
-      cy.get('.tab-content ul.nav.nav-tabs li')
-        .first()
-        .click();
+      cy.get('.tab-content ul.nav.nav-tabs li').first().click();
       cy.get('span.Select-clear').click();
 
       // trigger 1 new query
       cy.wait('@treemapRequest');
 
-      // no other requests occurred
+      // make sure query API not requested multiple times
       cy.on('fail', err => {
-        expect(err.message).to.include('Timed out retrying');
+        expect(err.message).to.include('timed out waiting');
         return false;
       });
+
       cy.wait('@boxplotRequest', { timeout: 1000 }).then(() => {
         throw new Error('Unexpected API call.');
       });

@@ -24,7 +24,7 @@ import { isFeatureEnabled, FeatureFlag } from 'src/featureFlags';
 import { Logger, LOG_ACTIONS_RENDER_CHART_CONTAINER } from '../logger/LogUtils';
 import Loading from '../components/Loading';
 import RefreshChartOverlay from '../components/RefreshChartOverlay';
-import StackTraceMessage from '../components/StackTraceMessage';
+import ErrorMessageWithStackTrace from '../components/ErrorMessage/ErrorMessageWithStackTrace';
 import ErrorBoundary from '../components/ErrorBoundary';
 import ChartRenderer from './ChartRenderer';
 import './chart.less';
@@ -34,6 +34,8 @@ const propTypes = {
   actions: PropTypes.object,
   chartId: PropTypes.number.isRequired,
   datasource: PropTypes.object.isRequired,
+  // current chart is included by dashboard
+  dashboardId: PropTypes.number,
   // original selected values for FilterBox viz
   // so that FilterBox can pre-populate selected values
   // only affect UI control
@@ -71,6 +73,8 @@ const defaultProps = {
   initialValues: BLANK,
   setControlValue() {},
   triggerRender: false,
+  dashboardId: null,
+  chartStackTrace: null,
 };
 
 class Chart extends React.PureComponent {
@@ -101,6 +105,7 @@ class Chart extends React.PureComponent {
         false,
         this.props.timeout,
         this.props.chartId,
+        this.props.dashboardId,
       );
     } else {
       // Create chart with POST request
@@ -109,6 +114,7 @@ class Chart extends React.PureComponent {
         false,
         this.props.timeout,
         this.props.chartId,
+        this.props.dashboardId,
       );
     }
   }
@@ -132,10 +138,11 @@ class Chart extends React.PureComponent {
     });
   }
 
-  renderStackTraceMessage() {
+  renderErrorMessage() {
     const { chartAlert, chartStackTrace, queryResponse } = this.props;
     return (
-      <StackTraceMessage
+      <ErrorMessageWithStackTrace
+        error={queryResponse?.errors?.[0]}
         message={chartAlert}
         link={queryResponse ? queryResponse.link : null}
         stackTrace={chartStackTrace}
@@ -161,7 +168,7 @@ class Chart extends React.PureComponent {
     const isFaded = refreshOverlayVisible && !errorMessage;
     this.renderContainerStartTime = Logger.getTimestamp();
     if (chartStatus === 'failed') {
-      return this.renderStackTraceMessage();
+      return this.renderErrorMessage();
     }
     if (errorMessage) {
       return <Alert bsStyle="warning">{errorMessage}</Alert>;

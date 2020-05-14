@@ -56,7 +56,7 @@ const propTypes = {
   charts: PropTypes.objectOf(chartPropShape).isRequired,
   layout: PropTypes.object.isRequired,
   expandedSlices: PropTypes.object.isRequired,
-  css: PropTypes.string.isRequired,
+  customCss: PropTypes.string.isRequired,
   colorNamespace: PropTypes.string,
   colorScheme: PropTypes.string,
   isStarred: PropTypes.bool.isRequired,
@@ -194,7 +194,13 @@ class Header extends React.PureComponent {
         interval: 0,
         chartCount: chartList.length,
       });
-      return this.props.fetchCharts(chartList, true);
+
+      return this.props.fetchCharts(
+        chartList,
+        true,
+        0,
+        this.props.dashboardInfo.id,
+      );
     }
     return false;
   }
@@ -212,7 +218,12 @@ class Header extends React.PureComponent {
         interval,
         chartCount: affectedCharts.length,
       });
-      return fetchCharts(affectedCharts, true, interval * 0.2);
+      return fetchCharts(
+        affectedCharts,
+        true,
+        interval * 0.2,
+        dashboardInfo.id,
+      );
     };
 
     this.refreshTimer = setPeriodicRunner({
@@ -290,7 +301,7 @@ class Header extends React.PureComponent {
       dashboardTitle,
       layout,
       expandedSlices,
-      css,
+      customCss,
       colorNamespace,
       colorScheme,
       onUndo,
@@ -438,8 +449,7 @@ class Header extends React.PureComponent {
 
           {this.state.showingPropertiesModal && (
             <PropertiesModal
-              dashboardTitle={dashboardTitle}
-              dashboardInfo={dashboardInfo}
+              dashboardId={dashboardInfo.id}
               show={this.state.showingPropertiesModal}
               onHide={this.hidePropertiesModal}
               onDashboardSave={updates => {
@@ -466,7 +476,7 @@ class Header extends React.PureComponent {
             dashboardTitle={dashboardTitle}
             layout={layout}
             expandedSlices={expandedSlices}
-            css={css}
+            customCss={customCss}
             colorNamespace={colorNamespace}
             colorScheme={colorScheme}
             onSave={onSave}

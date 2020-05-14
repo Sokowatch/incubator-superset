@@ -20,11 +20,16 @@
 /* eslint no-param-reassign: ["error", { "props": false }] */
 import moment from 'moment';
 import { t } from '@superset-ui/translation';
+import {
+  getChartBuildQueryRegistry,
+  getChartMetadataRegistry,
+} from '@superset-ui/chart';
 import { SupersetClient } from '@superset-ui/connection';
 import { isFeatureEnabled, FeatureFlag } from 'src/featureFlags';
 import {
   getExploreUrlAndPayload,
   getAnnotationJsonUrl,
+  postForm,
 } from '../explore/exploreUtils';
 import {
   requiresQuery,
@@ -102,7 +107,7 @@ export function runAnnotationQuery(
   formData = null,
   key,
 ) {
-  return function(dispatch, getState) {
+  return function (dispatch, getState) {
     const sliceKey = key || Object.keys(getState().charts)[0];
     // make a copy of formData, not modifying original formData
     const fd = {
@@ -201,53 +206,101 @@ export function addChart(chart, key) {
   return { type: ADD_CHART, chart, key };
 }
 
+function legacyChartDataRequest(
+  formData,
+  force,
+  method,
+  dashboardId,
+  requestParams,
+) {
+  const { url, payload } = getExploreUrlAndPayload({
+    formData,
+    endpointType: 'json',
+    force,
+    allowDomainSharding,
+    method,
+    requestParams: dashboardId ? { dashboard_id: dashboardId } : {},
+  });
+  const querySettings = {
+    ...requestParams,
+    url,
+    postPayload: { form_data: payload },
+  };
+
+  const clientMethod =
+    method === 'GET' && isFeatureEnabled(FeatureFlag.CLIENT_CACHE)
+      ? SupersetClient.get
+      : SupersetClient.post;
+
+  return clientMethod(querySettings);
+}
+
+async function v1ChartDataRequest(formData, force, requestParams) {
+  const buildQuery = await getChartBuildQueryRegistry().get(formData.viz_type);
+  const payload = buildQuery({ ...formData, force });
+  const querySettings = {
+    ...requestParams,
+    endpoint: '/api/v1/chart/data',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  };
+
+  return SupersetClient.post(querySettings);
+}
+
 export function exploreJSON(
   formData,
   force = false,
   timeout = 60,
   key,
   method,
+  dashboardId,
 ) {
-  return dispatch => {
-    const { url, payload } = getExploreUrlAndPayload({
-      formData,
-      endpointType: 'json',
-      force,
-      allowDomainSharding,
-      method,
-    });
+  return async dispatch => {
     const logStart = Logger.getTimestamp();
     const controller = new AbortController();
-    const { signal } = controller;
 
-    dispatch(chartUpdateStarted(controller, payload, key));
+    const { useLegacyApi } = getChartMetadataRegistry().get(formData.viz_type);
 
-    let querySettings = {
-      url,
-      postPayload: { form_data: payload },
-      signal,
+    let requestParams = {
+      signal: controller.signal,
       timeout: timeout * 1000,
     };
+
     if (allowDomainSharding) {
-      querySettings = {
-        ...querySettings,
+      requestParams = {
+        ...requestParams,
         mode: 'cors',
         credentials: 'include',
       };
     }
 
-    const clientMethod =
-      method === 'GET' && isFeatureEnabled(FeatureFlag.CLIENT_CACHE)
-        ? SupersetClient.get
-        : SupersetClient.post;
-    const queryPromise = clientMethod(querySettings)
+    const queryPromiseRaw = useLegacyApi
+      ? legacyChartDataRequest(
+          formData,
+          force,
+          method,
+          dashboardId,
+          requestParams,
+        )
+      : v1ChartDataRequest(formData, force, requestParams);
+
+    dispatch(chartUpdateStarted(controller, formData, key));
+
+    const queryPromiseCaught = queryPromiseRaw
       .then(({ json }) => {
+        // new API returns an object with an array of restults
+        // problem: json holds a list of results, when before we were just getting one result.
+        // `queryResponse` state is used all over the place.
+        // How to make the entire app compatible with multiple results?
+        // For now just use the first result.
+        const result = useLegacyApi ? json : json.result[0];
         dispatch(
           logEvent(LOG_ACTIONS_LOAD_CHART, {
             slice_id: key,
-            is_cached: json.is_cached,
+            is_cached: result.is_cached,
             force_refresh: force,
-            row_count: json.rowcount,
+            row_count: result.rowcount,
             datasource: formData.datasource,
             start_offset: logStart,
             ts: new Date().getTime(),
@@ -255,12 +308,12 @@ export function exploreJSON(
             has_extra_filters:
               formData.extra_filters && formData.extra_filters.length > 0,
             viz_type: formData.viz_type,
-            data_age: json.is_cached
-              ? moment(new Date()).diff(moment.utc(json.cached_dttm))
+            data_age: result.is_cached
+              ? moment(new Date()).diff(moment.utc(result.cached_dttm))
               : null,
           }),
         );
-        return dispatch(chartUpdateSucceeded(json, key));
+        return dispatch(chartUpdateSucceeded(result, key));
       })
       .catch(response => {
         const appendErrorLog = (errorDetails, isCached) => {
@@ -297,9 +350,9 @@ export function exploreJSON(
     const annotationLayers = formData.annotation_layers || [];
 
     return Promise.all([
-      queryPromise,
+      queryPromiseCaught,
       dispatch(triggerQuery(false, key)),
-      dispatch(updateQueryFormData(payload, key)),
+      dispatch(updateQueryFormData(formData, key)),
       ...annotationLayers.map(x =>
         dispatch(runAnnotationQuery(x, timeout, formData, key)),
       ),
@@ -308,7 +361,13 @@ export function exploreJSON(
 }
 
 export const GET_SAVED_CHART = 'GET_SAVED_CHART';
-export function getSavedChart(formData, force = false, timeout = 60, key) {
+export function getSavedChart(
+  formData,
+  force = false,
+  timeout = 60,
+  key,
+  dashboardId,
+) {
   /*
    * Perform a GET request to `/explore_json`.
    *
@@ -319,18 +378,24 @@ export function getSavedChart(formData, force = false, timeout = 60, key) {
    *  GET  /explore_json?{"chart_id":1,"extra_filters":"..."}
    *
    */
-  return exploreJSON(formData, force, timeout, key, 'GET');
+  return exploreJSON(formData, force, timeout, key, 'GET', dashboardId);
 }
 
 export const POST_CHART_FORM_DATA = 'POST_CHART_FORM_DATA';
-export function postChartFormData(formData, force = false, timeout = 60, key) {
+export function postChartFormData(
+  formData,
+  force = false,
+  timeout = 60,
+  key,
+  dashboardId,
+) {
   /*
    * Perform a POST request to `/explore_json`.
    *
    * This will post the form data to the endpoint, returning a new chart.
    *
    */
-  return exploreJSON(formData, force, timeout, key, 'POST');
+  return exploreJSON(formData, force, timeout, key, 'POST', dashboardId);
 }
 
 export function redirectSQLLab(formData) {
@@ -344,14 +409,12 @@ export function redirectSQLLab(formData) {
       postPayload: { form_data: formData },
     })
       .then(({ json }) => {
-        const redirectUrl = new URL(window.location);
-        redirectUrl.pathname = '/superset/sqllab';
-        for (const key of redirectUrl.searchParams.keys()) {
-          redirectUrl.searchParams.delete(key);
-        }
-        redirectUrl.searchParams.set('datasourceKey', formData.datasource);
-        redirectUrl.searchParams.set('sql', json.query);
-        window.open(redirectUrl.href, '_blank');
+        const redirectUrl = '/superset/sqllab';
+        const payload = {
+          datasourceKey: formData.datasource,
+          sql: json.query,
+        };
+        postForm(redirectUrl, payload);
       })
       .catch(() =>
         dispatch(addDangerToast(t('An error occurred while loading the SQL'))),
@@ -359,7 +422,7 @@ export function redirectSQLLab(formData) {
   };
 }
 
-export function refreshChart(chartKey, force) {
+export function refreshChart(chartKey, force, dashboardId) {
   return (dispatch, getState) => {
     const chart = (getState().charts || {})[chartKey];
     const timeout = getState().dashboardInfo.common.conf
@@ -372,7 +435,13 @@ export function refreshChart(chartKey, force) {
       return;
     }
     dispatch(
-      postChartFormData(chart.latestQueryFormData, force, timeout, chart.id),
+      postChartFormData(
+        chart.latestQueryFormData,
+        force,
+        timeout,
+        chart.id,
+        dashboardId,
+      ),
     );
   };
 }

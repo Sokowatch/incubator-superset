@@ -20,8 +20,8 @@ import React from 'react';
 import { shallow } from 'enzyme';
 import { Overlay, Tooltip } from 'react-bootstrap';
 
-import FilterTooltipWrapper from '../../../../src/dashboard/components/FilterTooltipWrapper';
-import FilterIndicatorTooltip from '../../../../src/dashboard/components/FilterIndicatorTooltip';
+import FilterTooltipWrapper from 'src/dashboard/components/FilterTooltipWrapper';
+import FilterIndicatorTooltip from 'src/dashboard/components/FilterIndicatorTooltip';
 
 describe('FilterTooltipWrapper', () => {
   const mockedProps = {
@@ -48,23 +48,21 @@ describe('FilterTooltipWrapper', () => {
     expect(wrapper.find(Tooltip)).toHaveLength(1);
   });
 
-  it('should show tooltip on hover', () => {
+  it('should show tooltip on hover', async () => {
     const wrapper = setup();
     wrapper.instance().isHover = true;
 
-    jest.useFakeTimers();
     wrapper.find('.indicator-container').simulate('mouseover');
-    jest.runAllTimers();
+    await new Promise(r => setTimeout(r, 101));
     expect(wrapper.state('show')).toBe(true);
   });
 
-  it('should hide tooltip on hover', () => {
+  it('should hide tooltip on hover', async () => {
     const wrapper = setup();
     wrapper.instance().isHover = false;
 
-    jest.useFakeTimers();
     wrapper.find('.indicator-container').simulate('mouseout');
-    jest.runAllTimers();
+    await new Promise(r => setTimeout(r, 101));
     expect(wrapper.state('show')).toBe(false);
   });
 });

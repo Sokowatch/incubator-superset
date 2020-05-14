@@ -20,12 +20,11 @@ import React from 'react';
 import { mount } from 'enzyme';
 import sinon from 'sinon';
 
-import Timer from '../../../src/components/Timer';
-import { now } from '../../../src/modules/dates';
+import Timer from 'src/components/Timer';
+import { now } from 'src/modules/dates';
 
 describe('Timer', () => {
   let wrapper;
-  let clock;
   const mockedProps = {
     endTime: null,
     isRunning: true,
@@ -33,21 +32,17 @@ describe('Timer', () => {
   };
 
   beforeEach(() => {
-    clock = sinon.useFakeTimers();
     mockedProps.startTime = now() + 1;
     wrapper = mount(<Timer {...mockedProps} />);
-  });
-  afterEach(() => {
-    clock.restore();
   });
 
   it('is a valid element', () => {
     expect(React.isValidElement(<Timer {...mockedProps} />)).toBe(true);
   });
 
-  it('componentWillMount starts timer after 30ms and sets state.clockStr', () => {
+  it('componentWillMount starts timer after 30ms and sets state.clockStr', async () => {
     expect(wrapper.state().clockStr).toBe('');
-    clock.tick(31);
+    await new Promise(r => setTimeout(r, 35));
     expect(wrapper.state().clockStr).not.toBe('');
   });
 

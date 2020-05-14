@@ -130,6 +130,8 @@ class SupersetAppInitializer:
             DruidColumnInlineView,
             Druid,
         )
+        from superset.datasets.api import DatasetRestApi
+        from superset.queries.api import QueryRestApi
         from superset.connectors.sqla.views import (
             TableColumnInlineView,
             SqlMetricInlineView,
@@ -149,9 +151,9 @@ class SupersetAppInitializer:
             CssTemplateModelView,
             CssTemplateAsyncModelView,
         )
-        from superset.views.chart.api import ChartRestApi
+        from superset.charts.api import ChartRestApi
         from superset.views.chart.views import SliceModelView, SliceAsync
-        from superset.views.dashboard.api import DashboardRestApi
+        from superset.dashboards.api import DashboardRestApi
         from superset.views.dashboard.views import (
             DashboardModelView,
             Dashboard,
@@ -182,7 +184,8 @@ class SupersetAppInitializer:
         appbuilder.add_api(ChartRestApi)
         appbuilder.add_api(DashboardRestApi)
         appbuilder.add_api(DatabaseRestApi)
-
+        appbuilder.add_api(DatasetRestApi)
+        appbuilder.add_api(QueryRestApi)
         #
         # Setup regular views
         #

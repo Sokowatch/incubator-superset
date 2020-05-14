@@ -83,3 +83,4 @@ messages.mo
 
 #Env files
 .env
+docker/requirements-local.txt

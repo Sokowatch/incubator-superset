@@ -18,10 +18,9 @@
  */
 import React from 'react';
 import { shallow } from 'enzyme';
-import sinon from 'sinon';
 
-import AnchorLink from '../../../src/components/AnchorLink';
-import URLShortLinkButton from '../../../src/components/URLShortLinkButton';
+import AnchorLink from 'src/components/AnchorLink';
+import URLShortLinkButton from 'src/components/URLShortLinkButton';
 
 describe('AnchorLink', () => {
   const props = {
@@ -41,17 +40,16 @@ describe('AnchorLink', () => {
     delete global.window.location.value;
   });
 
-  it('should scroll the AnchorLink into view upon mount', () => {
-    const callback = sinon.spy();
-    const clock = sinon.useFakeTimers();
-    const stub = sinon.stub(document, 'getElementById').returns({
+  it('should scroll the AnchorLink into view upon mount', async () => {
+    const callback = jest.fn();
+    const stub = jest.spyOn(document, 'getElementById').mockReturnValue({
       scrollIntoView: callback,
     });
 
     shallow(<AnchorLink {...props} />);
-    clock.tick(2000);
-    expect(callback.callCount).toEqual(1);
-    stub.restore();
+    await new Promise(r => setTimeout(r, 2000));
+
+    expect(stub).toHaveBeenCalledTimes(1);
   });
 
   it('should render anchor link with id', () => {
