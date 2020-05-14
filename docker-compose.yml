@@ -64,7 +64,7 @@ services:
        VIRTUAL_HOST: 'superset.sokowatch.com'
        VIRTUAL_PORT: 8088
        LETSENCRYPT_HOST: 'superset.sokowatch.com'
-       LETSENCRYPT_EMAIL: 'sokowatchproduct@gmail.com'
+       LETSENCRYPT_EMAIL: 'support@sokowatch.com'
 
   superset-init:
     build: *superset-build
